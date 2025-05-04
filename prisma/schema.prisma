@@ -14,9 +14,11 @@ datasource db {
 model Group {
   id           String        @id
   name         String
+  information  String?       @db.Text
   currency     String        @default("$")
   participants Participant[]
   expenses     Expense[]
+  activities   Activity[]
   createdAt    DateTime      @default(now())
 }
 
@@ -52,6 +54,11 @@ model Expense {
   splitMode       SplitMode         @default(EVENLY)
   createdAt       DateTime          @default(now())
   documents       ExpenseDocument[]
+  notes           String?
+
+  recurrenceRule  RecurrenceRule?    @default(NONE)
+  recurringExpenseLink RecurringExpenseLink?
+  recurringExpenseLinkId String?
 }
 
 model ExpenseDocument {
@@ -70,6 +77,29 @@ enum SplitMode {
   BY_AMOUNT
 }
 
+model RecurringExpenseLink {
+  id String @id
+  groupId   String
+  currentFrameExpense Expense @relation(fields: [currentFrameExpenseId], references: [id], onDelete: Cascade)
+  currentFrameExpenseId String @unique
+
+  // Note: We do not want to link to the next expense because once it is created, it should be 
+  // treated as it's own independent entity. This means that if a user wants to delete an Expense
+  // and any prior related recurring expenses, they'll need to delete them one by one.
+  nextExpenseCreatedAt DateTime?
+  nextExpenseDate DateTime
+
+  @@index([groupId])
+  @@index([groupId, nextExpenseCreatedAt, nextExpenseDate(sort: Desc)])
+}
+
+enum RecurrenceRule {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 model ExpensePaidFor {
   expense       Expense     @relation(fields: [expenseId], references: [id], onDelete: Cascade)
   participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -78,4 +108,22 @@ model ExpensePaidFor {
   shares        Int         @default(1)
 
   @@id([expenseId, participantId])
+}
+
+model Activity {
+  id            String       @id
+  group         Group        @relation(fields: [groupId], references: [id])
+  groupId       String
+  time          DateTime     @default(now())
+  activityType  ActivityType
+  participantId String?
+  expenseId     String?
+  data          String?
+}
+
+enum ActivityType {
+  UPDATE_GROUP
+  CREATE_EXPENSE
+  UPDATE_EXPENSE
+  DELETE_EXPENSE
 }
